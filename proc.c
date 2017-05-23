@@ -45,6 +45,26 @@ allocproc(void)
   return 0;
 
 found:
+
+/////////////////////////////////////////////////////////
+  //pages information
+
+  #ifndef NONE
+    p->hasSwapFile=0;
+    p->numOfPsycPages =0;
+    p->numOfPages=0;
+
+    #ifdef LIFO
+      p->Ppages.top=0;
+    #endif
+    #ifdef SCFIFO
+      p->Ppages.first=0;
+      p->Ppages.last=0;
+    #endif
+  #endif
+
+
+
   p->state = EMBRYO;
   p->pid = nextpid++;
   release(&ptable.lock);
@@ -99,6 +119,12 @@ userinit(void)
   safestrcpy(p->name, "initcode", sizeof(p->name));
   p->cwd = namei("/");
 
+
+  /////////////////////////////////////////////////////////
+  //pages information
+
+
+
   p->state = RUNNABLE;
 }
 
@@ -117,6 +143,10 @@ growproc(int n)
     if((sz = deallocuvm(proc->pgdir, sz, sz + n)) == 0)
       return -1;
   }
+
+  ////////////////////////
+  //proc->numOfPages= PGROUNDUP(sz)/PGSIZE;
+  
   proc->sz = sz;
   switchuvm(proc);
   return 0;

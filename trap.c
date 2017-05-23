@@ -51,6 +51,10 @@ trap(struct trapframe *tf)
     if(cpu->id == 0){
       acquire(&tickslock);
       ticks++;
+      //*****************(****************  TO-DO******************************************************************//
+      #ifdef LAP
+      updateAccessed();
+      #endif
       wakeup(&ticks);
       release(&tickslock);
     }
@@ -77,6 +81,12 @@ trap(struct trapframe *tf)
             cpu->id, tf->cs, tf->eip);
     lapiceoi();
     break;
+
+    #ifndef NONE
+    case T_PGFLT: // in case of a page fault
+      if(handlePageFoult(rcr2()) >= 0 && proc)
+        break;
+    #endif
    
   //PAGEBREAK: 13
   default:

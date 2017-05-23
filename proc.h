@@ -1,6 +1,10 @@
 // Segments in proc->gdt.
 #define NSEGS     7
 
+#define MAX_TOTAL_PAGES 30
+#define MAX_PSYC_PAGES 15
+
+
 // Per-CPU state
 struct cpu {
   uchar id;                    // Local APIC ID; index into cpus[] below
@@ -49,6 +53,29 @@ struct context {
   uint eip;
 };
 
+struct swapedMetaData{  
+  int pagesOffset[MAX_PSYC_PAGES];
+  int numOfPagesInFile;
+};
+
+
+struct pagesInMem {
+  uint container[MAX_PSYC_PAGES];  //pages offsets in swaped file
+  #ifdef LIFO
+  int top;
+  #endif
+
+  #ifdef SCFIFO
+  uint first;
+  uint last;
+  #endif
+  
+  #ifdef LAP
+  int accessCounter[MAX_PSYC_PAGES];
+  int LAPInd;
+  #endif
+};
+
 enum procstate { UNUSED, EMBRYO, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
 // Per-process state
@@ -69,8 +96,16 @@ struct proc {
 
   //Swap file. must initiate with create swap file
   struct file *swapFile;			//page file
+  #ifndef NONE
+      int hasSwapFile; 
+      int numOfPsycPages;             //number of physical Pages in file
+      int numOfPages;
+      struct pagesInMem Ppages;        //pages in process memory
+      struct swapedMetaData swapedPages;  //meta Data for swaped file
+  #endif
 
 };
+
 
 // Process memory is laid out contiguously, low addresses first:
 //   text

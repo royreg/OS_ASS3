@@ -8,6 +8,10 @@ struct rtcdate;
 struct spinlock;
 struct stat;
 struct superblock;
+struct pagesInMem;
+
+
+ ;
 
 // bio.c
 void            binit(void);
@@ -185,6 +189,14 @@ void            switchuvm(struct proc*);
 void            switchkvm(void);
 int             copyout(pde_t*, uint, void*, uint);
 void            clearpteu(pde_t *pgdir, char *uva);
+#ifndef NONE
+    uint removeFromPhysic(pde_t *pgdir,struct pagesInMem* );
+    int addPage(struct pagesInMem* ,uint );
+    int swapOut(uint );
+    int swapIn(uint );
+    int handlePageFoult(uint);
+#endif
+
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))

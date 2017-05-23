@@ -740,6 +740,10 @@ removeSwapFile(struct proc* p)
 
 }
 
+//int createSwapFile(struct proc *p) – Creates a new swap file for a given process p.
+//Requires p->pid to be correctly initiated.
+//int readFromSwapFile(struct proc *p, char* 
+
 
 //return 0 on success
 int
