@@ -9,6 +9,7 @@ struct spinlock;
 struct stat;
 struct superblock;
 struct pagesInMem;
+struct swapedMetaData;
 
 
  ;
@@ -189,12 +190,18 @@ void            switchuvm(struct proc*);
 void            switchkvm(void);
 int             copyout(pde_t*, uint, void*, uint);
 void            clearpteu(pde_t *pgdir, char *uva);
+
 #ifndef NONE
     uint removeFromPhysic(pde_t *pgdir,struct pagesInMem* );
     int addPage(struct pagesInMem* ,uint );
     int swapOut(uint );
     int swapIn(uint );
     int handlePageFoult(uint);
+    void clearPm(struct pagesInMem* pm);
+    void copyPm(struct pagesInMem* pm, struct pagesInMem* copyPm);
+    void clearSwapData(struct swapedMetaData *sm);
+
+
 #endif
 
 

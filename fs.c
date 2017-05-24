@@ -777,8 +777,10 @@ int
 writeToSwapFile(struct proc * p, char* buffer, uint placeOnFile, uint size)
 {
 	p->swapFile->off = placeOnFile;
-
-	return filewrite(p->swapFile, buffer, size);
+  cprintf("HECTHUSH \n\n\n  \n\n\n\n");
+	int y=filewrite(p->swapFile, buffer, size);
+  cprintf("HECTHUSH\n");
+  return y;
 
 }
 

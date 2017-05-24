@@ -13,10 +13,17 @@ struct segdesc gdt[NSEGS];
 
 
   #ifndef NONE
-    uint removeFromPhysic(pde_t *pgdir,struct pagesInMem *pm);
-    int addPage(struct pagesInMem *pm,uint va );
-    int swapOut(uint swapedPage);
-    int swapIn(uint page);
+    uint removeFromPhysic(pde_t *pgdir,struct pagesInMem *pm);  //update due policy
+    int addPage(struct pagesInMem *pm,uint va );                //update due policy
+    int swapOut(uint swapedPage);                               
+    int swapIn(uint page);                                      
+    void clearSwapData(struct swapedMetaData* sm);            
+    void clearPm(struct pagesInMem* pm);                      //update due policy
+    void copyPm(struct pagesInMem* pm, struct pagesInMem* copyPm);      //update due policy
+    int checkShellInit(char nm[]);            
+    void deleteFromPhysic(uint va);                    //update due policy
+    void deleteFromSwapMeta(uint a);
+
 
 
   #endif
@@ -232,6 +239,9 @@ loaduvm(pde_t *pgdir, char *addr, struct inode *ip, uint offset, uint sz)
 int
 allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
 {
+  if(checkShellInit(proc->name))
+      cprintf("******************************(allocuvm)num of total pages is: %d\n",proc->numOfPsycPages+proc->swapedPages.numOfPagesInFile);
+
   char *mem;
   uint a;
   
@@ -242,23 +252,20 @@ allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
 
   a = PGROUNDUP(oldsz);
   for(; a < newsz; a += PGSIZE){
+    
+    cprintf("(allocuvm) virtual address is :%d\n",a);
+
     #ifndef NONE
-    if(proc->pid <3){
+    if(!checkShellInit(proc->name)){
       cprintf("Init and shell...moving on\n");
       goto special;
-
     }
-    
-    cprintf("trying to allocate Page\n");
-    cprintf("total number of Pages of current proc:%d\n",proc->numOfPages);
-    if (proc->numOfPages > MAX_TOTAL_PAGES){  //MAX PAGES ExCEDES
+
+    if (proc->numOfPages >= MAX_TOTAL_PAGES){  //MAX PAGES ExCEDES
       panic("number of pages per process exceded");
       return 0;}
-
-     cprintf("number of physical Pages of current proc before adding new one:%d\n",proc->numOfPsycPages);
   
-    if(proc->numOfPsycPages>=MAX_PSYC_PAGES){    //need to swap I.E MORE THEN 15 PAGES
-      cprintf("proc Memory is full need to swap page to file to make room\n");
+    if(proc->numOfPsycPages>=MAX_PSYC_PAGES){    //need to swap I.E MORE THEN 15 PAGES   
       if(!proc->hasSwapFile){
         cprintf("No SwapFile,Creating swap file...\n");
         createSwapFile(proc);
@@ -268,27 +275,17 @@ allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
         }
 
       }
-       cprintf("proc->numOfPsycPages before removing page to SwapFile is: %d\n",proc->numOfPsycPages);
+      
       uint swapedPage=removeFromPhysic(pgdir,&proc->Ppages);
-      cprintf("proc->numOfPsycPages after removing page to SwapFile is: %d\n",proc->numOfPsycPages);
 
-      cprintf("swapedPage is : %d\n",swapedPage);
-      pte_t *pte;
-      if((pte = walkpgdir(pgdir,(void*)swapedPage,0))==0)
-        panic("swapedPage error in allocuvm");
-
-      *pte &= ~PTE_P;
-      *pte |= PTE_PG;
-        cprintf("removing page to file number of Pages in file before insertion is: %d\n",proc->swapedPages.numOfPagesInFile);
+      cprintf("(allocuvm) page to swap out is: %d\n",swapedPage);
       swapOut(swapedPage);
-      cprintf("removing page to file number of Pages in file After insertion is: %d\n",proc->swapedPages.numOfPagesInFile);
-
     }
 
-    
+
     special:
     #endif
-    cprintf("There is a room on memory,inserting page to pghysical memory\n");
+
     mem = kalloc();
     if(mem == 0){
       cprintf("allocuvm out of memory\n");
@@ -299,8 +296,11 @@ allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
     mappages(pgdir, (char*)a, PGSIZE, v2p(mem), PTE_W|PTE_U);
    
     #ifndef NONE
-    addPage(&proc->Ppages,a);
-    cprintf("num of Pages on memory after insertion is: %d\n",proc->numOfPsycPages);
+    if(checkShellInit(proc->name)){
+      cprintf("******************************(allocuvm)num of total pages is: %d\n",proc->numOfPsycPages+proc->swapedPages.numOfPagesInFile);
+      addPage(&proc->Ppages,a);
+      proc->numOfPages++;
+    }
     #endif
 
   }
@@ -314,6 +314,7 @@ allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
 int
 deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
 {
+  
   pte_t *pte;
   uint a, pa;
 
@@ -331,22 +332,19 @@ deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
         panic("kfree");
       char *v = p2v(pa);
       kfree(v);
+     
       #ifndef NONE
-        if(proc->pid > 2){
-          for(int i=0 ;i<MAX_PSYC_PAGES;i++){
-            if(proc->Ppages.container[i]==(uint)a){
-             proc->Ppages.container[i]=-1;
-             proc->numOfPsycPages--;
-            }
-          }
-        }
+      if(checkShellInit(proc->name))
+        deleteFromPhysic(a);
       #endif
       *pte = 0;
     }
      #ifndef NONE
-      else if(proc->pid > 2 && *pte & PTE_PG){
+      else if(checkShellInit(proc->name) && *pte & PTE_PG){
+        deleteFromSwapMeta(a);
         *pte = 0;
       }
+      proc->numOfPages--;
       #endif
   }
   return newsz;
@@ -484,6 +482,51 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
 
 
 
+void deleteFromPhysic(uint va){
+
+  #ifdef LIFO
+    struct pagesInMem *pm=&proc->Ppages;
+    va = PGROUNDDOWN(va);
+    if(!pm->top){
+      return;
+    }
+    int page = 0;
+    for(; page <= pm->top; page++){
+      if(pm->container[page] == va)
+        goto rearage;
+    }
+    return;
+    rearage:
+    for(;page < pm->top; page++)
+      pm->container[page] = pm->container[page+1];
+    pm->container[pm->top] = -1;
+    pm->top--;
+    proc->numOfPsycPages--;
+
+    cprintf("(deleteFromPhysic) TOP is; %d\n",pm->top);
+    cprintf("(deleteFromPhysic) num of physis is: %d\n",proc->numOfPsycPages);
+
+  //LIFO  
+  #endif  
+
+}
+
+
+
+void deleteFromSwapMeta(uint a){
+  int i;
+  for(i=0;i<MAX_PSYC_PAGES;i++){
+    if(proc->swapedPages.pagesOffset[i]==a){
+      proc->swapedPages.pagesOffset[i]=-1;
+      proc->swapedPages.numOfPagesInFile--;
+      break;
+    }
+  }
+  if(i>14)
+    panic("removeFromsWapMeta: didn't find the file int the swap meta data\n");
+}
+
+
 
 
 uint removeFromPhysic(pde_t *pgdir,struct pagesInMem *pm){
@@ -491,18 +534,18 @@ uint removeFromPhysic(pde_t *pgdir,struct pagesInMem *pm){
 
 
   #ifdef LIFO
-  cprintf("top  at start of removeFromPhysic is:%d\n",pm->top);
   if(!pm->top)
       panic("(LIFO) trying to select a page while the process has none.");
 
   int place=pm->top-1;
   ret = pm->container[place];
   pm->container[place]=-1;       //"free" page location in array
-    cprintf("top  at end of removeFromPhysic is:%d\n",pm->top);
   pm->top--;
   proc->numOfPsycPages--;
 
-  cprintf("top  at end of removeFromPhysic is:%d\n",pm->top);
+  cprintf("(removeFromPhysic) TOP is: %d\n",pm->top);
+  cprintf("(removeFromPhysic) num of physis is: %d\n",proc->numOfPsycPages);
+
   #endif
 
 #ifdef SCFIFO
@@ -541,28 +584,26 @@ uint removeFromPhysic(pde_t *pgdir,struct pagesInMem *pm){
 
 
 int addPage(struct pagesInMem *pm, uint va ){      //add page to container according to policy
+  va=PGROUNDDOWN(va);
+  
   #ifdef LIFO
-  cprintf("top of Stack at start of addPage is:%d\n",pm->top);
+  
   pm->container[pm->top]= va;
   pm->top++;
-  cprintf("top of Stack at end of addPage is:%d\n",pm->top);
   proc->numOfPsycPages++;
-
+  cprintf("(addpage) TOP is: %d\n",pm->top);
+  cprintf("(addpage) num of physis is: %d\n",proc->numOfPsycPages);
   #endif
-
 
   #ifdef SCFIFO
   pm->container[pm->last] = va;
   pm->last = (pm->last +1) % MAX_PSYC_PAGES;
   #endif
 
+
   #ifdef LAP
 
-
-
-
   #endif
-
 
 return 0;
 
@@ -574,8 +615,11 @@ int swapOut(uint swapedPage){           //swap 'swapedPage' out to FILE
   uint pa;
   char* mem;
 
-  uint va=PGROUNDDOWN(swapedPage);
-  if((pte=walkpgdir(proc->pgdir,(void*)va,0))==0)
+  swapedPage=PGROUNDDOWN(swapedPage);
+
+  cprintf("(swapOut) page to swap out is: %d\n",swapedPage);
+
+  if((pte=walkpgdir(proc->pgdir,(void*)swapedPage,0))==0)
     panic("Swapping Failed! trying to swap out none existing page");
   if(!(*pte & PTE_P))
     panic("SwapOut Failed! trying to SwapOut not present page");
@@ -589,27 +633,26 @@ int swapOut(uint swapedPage){           //swap 'swapedPage' out to FILE
 
   mem=p2v(pa);
 
-
   if(!proc->hasSwapFile){
     createSwapFile(proc);
     cprintf("No SwapFile ,creating one");
   }
 
   //here we calculate the place to insert the page to the file
-  int offsetToWrite;
+  uint offsetToWrite;
   for(offsetToWrite = 0 ; offsetToWrite<MAX_PSYC_PAGES ; offsetToWrite++){
     if(proc->swapedPages.pagesOffset[offsetToWrite]==-1){
-      proc->swapedPages.pagesOffset[offsetToWrite]=va;
+      proc->swapedPages.pagesOffset[offsetToWrite]=swapedPage;
       proc->swapedPages.numOfPagesInFile++;
       break;
     }
   }
-  cprintf("offset tor write is: %d\n",offsetToWrite);
 
   if(offsetToWrite>MAX_PSYC_PAGES)
     panic("SwapOut Failed! No room in swapFile");
   
-  if(writeToSwapFile(proc, (char*)va, offsetToWrite*PGSIZE,PGSIZE)<0)
+
+  if(writeToSwapFile(proc, (char*)swapedPage, offsetToWrite*PGSIZE,PGSIZE)<0)
      panic("SWAPOUT FAILED! failed to write to swapFile\n");
 
   kfree(mem);
@@ -623,20 +666,28 @@ int swapOut(uint swapedPage){           //swap 'swapedPage' out to FILE
 }
 
 int swapIn(uint page){
+
   uint va=PGROUNDDOWN(page);
   pte_t *pte;
   char* newAddr;
 
-  if((pte=walkpgdir(proc->pgdir,(void*)va,0))==0)
+  if((pte=walkpgdir(proc->pgdir,(void*)va,0))==0){
     panic("Swap In FAILED! Trying to swap in none existing page");
-  if(*pte & PTE_P )
+    return -1;
+  }
+  if(*pte & PTE_P ){
     panic("Swap In FALED! Trying to swap in an existing page");
-  if(*pte & PTE_U)
+    return -1;
+  }
+  if(!(*pte & PTE_U)){
     panic("Swap In FAILED! Trying to swap in a none user file");
+    return -1;
+  }
 
   newAddr=kalloc();
   if(newAddr == 0){
     panic("SwapIn FAILED! no Memort to allocate");
+    return -1;
   }
   memset(newAddr, 0, PGSIZE);
   
@@ -657,8 +708,6 @@ int swapIn(uint page){
   }
 
   addPage(&proc->Ppages,va);
-
-
   return 1;
   
 }
@@ -667,7 +716,7 @@ int handlePageFoult(uint va){
   pte_t *pte;
   pde_t *pde = proc->pgdir;
 
-
+  cprintf("Page Fault!!!!\n");
   if((pte = walkpgdir(pde,(void*)va,0))==0){
     panic("error at handlePageFoult: pte =0\n");
     return -1;}
@@ -684,9 +733,52 @@ int handlePageFoult(uint va){
     panic("at handlePageFoult: NOT USER ACCESS!\n");
     return -1;}
 
+
+    if(proc->numOfPsycPages==15){
+      uint swapi = removeFromPhysic(proc->pgdir,&proc->Ppages);
+      swapOut(swapi);
+    }
+
     return swapIn(va);
+    
   }
 
+void
+  copyPm(struct pagesInMem* pm, struct pagesInMem* copyPm)
+  { 
+    #ifdef LIFO
+    for(int i = 0; i < MAX_PSYC_PAGES; i++)
+      copyPm->container[i] = pm->container[i];
+    copyPm->top = pm->top;
+    #endif 
+}
+void
+  clearPm(struct pagesInMem* pm)
+  {
+    #ifdef LIFO
+    for(int i = 0; i < MAX_PSYC_PAGES; i++)
+      pm->container[i] = -1;
+    pm->top = 0;
+    #endif
+}
+
+void clearSwapData(struct swapedMetaData *sm){
+  #ifdef LIFO
+  for(int i=0; i< MAX_PSYC_PAGES; i++){
+    sm->pagesOffset[i] = -1;
+    sm->numOfPagesInFile = 0;
+  }
+  #endif
+}  
+
+int checkShellInit(char nm[]){
+  if(nm[0]== 's' && nm[1]=='h')
+    return 0;  
+  if(nm[0]=='i' && nm[1]== 'n' && nm[2]=='i' && nm[3]=='t')
+    return 0;
+
+  return 1;
+}
 
 
 

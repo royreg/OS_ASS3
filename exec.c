@@ -17,7 +17,13 @@ exec(char *path, char **argv)
   struct inode *ip;
   struct proghdr ph;
   pde_t *pgdir, *oldpgdir;
+  #ifndef NONE
+  
+  struct proc *p = 0;
+  if(proc->pid > 2 && (strlen(path) != 2 || strncmp(path, "sh", 2)))
+    p = proc;
 
+  #endif
   begin_op();
   if((ip = namei(path)) == 0){
     end_op();
@@ -25,6 +31,19 @@ exec(char *path, char **argv)
   }
   ilock(ip);
   pgdir = 0;
+
+  #ifndef NONE
+  struct pagesInMem oldPm;
+  int oldNumOfPsycPages=p->numOfPsycPages;
+  int oldNumOfPages=p->numOfPages;
+  if(p){
+    copyPm(&p->Ppages,&oldPm);
+    clearPm(&p->Ppages);
+    p->numOfPsycPages=0;
+    p->numOfPages=0;
+
+  }
+  #endif
 
   // Check ELF header
   if(readi(ip, (char*)&elf, 0, sizeof(elf)) < sizeof(elf))
@@ -34,6 +53,8 @@ exec(char *path, char **argv)
 
   if((pgdir = setupkvm()) == 0)
     goto bad;
+
+
 
   // Load program into memory.
   sz = 0;
@@ -85,6 +106,9 @@ exec(char *path, char **argv)
     if(*s == '/')
       last = s+1;
   safestrcpy(proc->name, last, sizeof(proc->name));
+  #ifndef NONE
+  clearSwapData(&p->swapedPages);
+  #endif
 
   // Commit to the user image.
   oldpgdir = proc->pgdir;
@@ -99,9 +123,22 @@ exec(char *path, char **argv)
  bad:
   if(pgdir)
     freevm(pgdir);
+  #ifndef NONE
+  if(p){
+    copyPm(&oldPm,&p->Ppages);
+    p->numOfPsycPages=oldNumOfPsycPages;
+    p->numOfPages=oldNumOfPages;
+
+  }
+  #endif
   if(ip){
     iunlockput(ip);
     end_op();
   }
+
   return -1;
 }
+
+
+
+

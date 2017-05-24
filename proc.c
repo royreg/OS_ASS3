@@ -19,6 +19,7 @@ extern void forkret(void);
 extern void trapret(void);
 
 static void wakeup1(void *chan);
+extern int checkShellInit(char nm[]);
 
 void
 pinit(void)
@@ -53,9 +54,16 @@ found:
     p->hasSwapFile=0;
     p->numOfPsycPages =0;
     p->numOfPages=0;
+    p->numOfPageFaults=0;
+    p->totalNumOfPagedOuts=0;
+
+    p->swapedPages.numOfPagesInFile=0;
+  
+
 
     #ifdef LIFO
-      p->Ppages.top=0;
+
+        p->Ppages.top=0;
     #endif
     #ifdef SCFIFO
       p->Ppages.first=0;
@@ -134,7 +142,7 @@ int
 growproc(int n)
 {
   uint sz;
-  
+
   sz = proc->sz;
   if(n > 0){
     if((sz = allocuvm(proc->pgdir, sz, sz + n)) == 0)
@@ -187,6 +195,25 @@ fork(void)
   safestrcpy(np->name, proc->name, sizeof(proc->name));
  
   pid = np->pid;
+  
+  #ifndef NONE
+    if( checkShellInit(proc->name) == 1 && proc->hasSwapFile){
+      createSwapFile(np);
+            
+       char buff;
+       int i;
+       for(i=0; i< proc->numOfPsycPages; i++){
+          if((readFromSwapFile(proc, &buff ,i*PGSIZE,PGSIZE))==0){
+            panic("error reading from file at fork");
+            break;}
+
+          if((writeToSwapFile(proc, &buff ,i*PGSIZE,PGSIZE))==0){
+            panic("error reading from file at fork");
+            break;}      
+      }     
+    }
+    #endif
+
 
   // lock to force the compiler to emit the np->state write last.
   acquire(&ptable.lock);
@@ -195,6 +222,8 @@ fork(void)
   
   return pid;
 }
+
+
 
 // Exit the current process.  Does not return.
 // An exited process remains in the zombie state
@@ -269,6 +298,16 @@ wait(void)
         p->name[0] = 0;
         p->killed = 0;
         release(&ptable.lock);
+
+        #ifndef NONE
+          if(p->swapFile){
+            removeSwapFile(p);
+            p->swapFile = 0;
+            p->hasSwapFile=0;
+            p->numOfPsycPages=0;
+          }
+        #endif
+
         return pid;
       }
     }

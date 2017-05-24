@@ -53,11 +53,7 @@ struct context {
   uint eip;
 };
 
-struct swapedMetaData{  
-  int pagesOffset[MAX_PSYC_PAGES];
-  int numOfPagesInFile;
-};
-
+#ifndef NONE
 
 struct pagesInMem {
   uint container[MAX_PSYC_PAGES];  //pages offsets in swaped file
@@ -75,6 +71,14 @@ struct pagesInMem {
   int LAPInd;
   #endif
 };
+
+struct swapedMetaData{  
+  int pagesOffset[MAX_PSYC_PAGES];
+  int numOfPagesInFile;
+};
+
+
+#endif
 
 enum procstate { UNUSED, EMBRYO, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
@@ -100,6 +104,8 @@ struct proc {
       int hasSwapFile; 
       int numOfPsycPages;             //number of physical Pages in file
       int numOfPages;
+      int numOfPageFaults;
+      int totalNumOfPagedOuts;
       struct pagesInMem Ppages;        //pages in process memory
       struct swapedMetaData swapedPages;  //meta Data for swaped file
   #endif
