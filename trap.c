@@ -84,6 +84,7 @@ trap(struct trapframe *tf)
 
     #ifndef NONE
     case T_PGFLT: // in case of a page fault
+      proc->numOfPageFaults++;
       if(handlePageFoult(rcr2()) >= 0 && proc)
         break;
     #endif

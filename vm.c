@@ -239,9 +239,10 @@ loaduvm(pde_t *pgdir, char *addr, struct inode *ip, uint offset, uint sz)
 int
 allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
 {
+  #ifndef NONE
   if(checkShellInit(proc->name))
       cprintf("******************************(allocuvm)num of total pages is: %d\n",proc->numOfPsycPages+proc->swapedPages.numOfPagesInFile);
-
+  #endif
   char *mem;
   uint a;
   
@@ -654,6 +655,8 @@ int swapOut(uint swapedPage){           //swap 'swapedPage' out to FILE
 
   if(writeToSwapFile(proc, (char*)swapedPage, offsetToWrite*PGSIZE,PGSIZE)<0)
      panic("SWAPOUT FAILED! failed to write to swapFile\n");
+
+  proc->totalNumOfPagedOuts++;
 
   kfree(mem);
   *pte = (*pte | PTE_PG);        //set the on file flag to 1;

@@ -56,19 +56,20 @@ found:
     p->numOfPages=0;
     p->numOfPageFaults=0;
     p->totalNumOfPagedOuts=0;
-
     p->swapedPages.numOfPagesInFile=0;
-  
-
-
+    
     #ifdef LIFO
-
-        p->Ppages.top=0;
+    p->Ppages.top=0;
     #endif
+    
     #ifdef SCFIFO
       p->Ppages.first=0;
       p->Ppages.last=0;
     #endif
+
+    #ifdef LAP
+    #endif 
+
   #endif
 
 
@@ -263,6 +264,10 @@ exit(void)
         wakeup1(initproc);
     }
   }
+
+  #ifdef TRUE
+  procdump();
+  #endif
 
   // Jump into the scheduler, never to return.
   proc->state = ZOMBIE;
@@ -524,7 +529,12 @@ procdump(void)
       state = states[p->state];
     else
       state = "???";
+  	#ifndef NONE
+    cprintf("%d %s %d %d %d %d %s", p->pid, state, p->numOfPsycPages, p->swapedPages.numOfPagesInFile, p->numOfPageFaults, p->totalNumOfPagedOuts, p->name);
+    #else
     cprintf("%d %s %s", p->pid, state, p->name);
+    #endif
+
     if(p->state == SLEEPING){
       getcallerpcs((uint*)p->context->ebp+2, pc);
       for(i=0; i<10 && pc[i] != 0; i++)
