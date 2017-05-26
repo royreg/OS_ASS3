@@ -656,13 +656,12 @@ int swapOut(uint swapedPage){           //swap 'swapedPage' out to FILE
   if(writeToSwapFile(proc, (char*)swapedPage, offsetToWrite*PGSIZE,PGSIZE)<0)
      panic("SWAPOUT FAILED! failed to write to swapFile\n");
 
-  proc->totalNumOfPagedOuts++;
-
   kfree(mem);
   *pte = (*pte | PTE_PG);        //set the on file flag to 1;
   *pte &= ~PTE_P;             //set the Present falg to 0
 
   lcr3(v2p(proc->pgdir));   //refresh TLB
+  proc->totalNumOfPagedOuts++;
 
 
   return 0;

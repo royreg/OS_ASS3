@@ -9,8 +9,15 @@
 #include "mmu.h"
 #include "spinlock.h"
 
+
+
+
 void freerange(void *vstart, void *vend);
 extern char end[]; // first address after kernel loaded from ELF file
+
+#ifndef NONE
+int TOTAL_FREE_PAGES=0;
+#endif
 
 struct run {
   struct run *next;
@@ -47,8 +54,14 @@ freerange(void *vstart, void *vend)
 {
   char *p;
   p = (char*)PGROUNDUP((uint)vstart);
-  for(; p + PGSIZE <= (char*)vend; p += PGSIZE)
+  for(; p + PGSIZE <= (char*)vend; p += PGSIZE){
+    
+    #ifndef NONE
+    TOTAL_FREE_PAGES++;
+    #endif
+    
     kfree(p);
+  }
 }
 
 //PAGEBREAK: 21
@@ -94,3 +107,28 @@ kalloc(void)
   return (char*)r;
 }
 
+
+#ifndef NONE
+int totalFreeP(void){
+  return TOTAL_FREE_PAGES;
+}
+
+
+int
+currFreeP(void)
+{
+  struct run *r;
+  uint currFreeP = 0;
+
+  if(kmem.use_lock)
+    acquire(&kmem.lock);
+  r = kmem.freelist;
+  while(r){
+    currFreeP++;
+    r = r->next;
+  }
+  if(kmem.use_lock)
+    release(&kmem.lock);
+  return currFreeP;
+}
+#endif

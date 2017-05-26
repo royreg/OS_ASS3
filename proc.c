@@ -203,7 +203,7 @@ fork(void)
             
        char buff;
        int i;
-       for(i=0; i< proc->numOfPsycPages; i++){
+       for(i=0; i< proc->swapedPages.numOfPagesInFile; i++){
           if((readFromSwapFile(proc, &buff ,i*PGSIZE,PGSIZE))==0){
             panic("error reading from file at fork");
             break;}
@@ -542,4 +542,8 @@ procdump(void)
     }
     cprintf("\n");
   }
+
+  #ifndef NONE
+    cprintf("<%d> / <%d> free pages in the system\n",currFreeP(),totalFreeP());
+  #endif
 }
