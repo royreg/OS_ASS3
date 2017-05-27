@@ -62,7 +62,7 @@ struct pagesInMem {
   #endif
 
   #ifdef SCFIFO
-  uint first;
+  //uint first;
   uint last;
   #endif
   

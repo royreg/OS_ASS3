@@ -510,9 +510,32 @@ void deleteFromPhysic(uint va){
   //LIFO  
   #endif  
 
+  #ifdef SCFIFO
+     struct pagesInMem *pm=&proc->Ppages;
+    va = PGROUNDDOWN(va);
+    if(!pm->last){
+      return;
+    }
+    int page = 0;
+    for(; page < pm->last; page++){
+      if(pm->container[page] == va)
+        goto rearage;
+    }
+    return;
+    rearage:
+    for(;page < pm->last-1; page++)
+      pm->container[page] = pm->container[page+1];
+    pm->container[pm->last-1] = -1;
+    pm->last--;
+    proc->numOfPsycPages--;
+
+    cprintf("(deleteFromPhysic) last is; %d\n",pm->last);
+    cprintf("(deleteFromPhysic) num of physis is: %d\n",proc->numOfPsycPages);
+
+  //SCFOFO
+  #endif
+
 }
-
-
 
 void deleteFromSwapMeta(uint a){
   int i;
@@ -545,7 +568,7 @@ uint removeFromPhysic(pde_t *pgdir,struct pagesInMem *pm){
   proc->numOfPsycPages--;
 
   cprintf("(removeFromPhysic) TOP is: %d\n",pm->top);
-  cprintf("(removeFromPhysic) num of physis is: %d\n",proc->numOfPsycPages);
+  cprintf("(removeFromPhysic) num of physics is: %d\n",proc->numOfPsycPages);
 
   #endif
 
@@ -553,25 +576,42 @@ uint removeFromPhysic(pde_t *pgdir,struct pagesInMem *pm){
   pte_t *pte;
   uint va=0;
   int i;
+  int j;
   for(i = 0; i< MAX_PSYC_PAGES +1; i++)              
   {
-      uint va=pm.container[pm.first];
+      
+      uint va=pm->container[0];
       if((pte = walkpgdir(pgdir, (void*)va, 0)) ==0)
         panic("SCFIO remove from phys");
 
-      pm.container[pm.first]=-1;
-      pm.first = (pm.first +1) % MAX_PSYC_PAGES;
+   
+      if(*pte & PTE_A){    //acssess bit is on - give another chance
+        *pte = (*pte & ~PTE_A);
 
+        for(j=0;j<pm->last-1;j++)
+          pm->container[j]=pm->container[j+1];
 
-      if(!(*pte & PTE_A))
-        break;
+        pm->container[pm->last -1]=va;
+        continue;
 
-      *pte = (*pte & ~PTE_A);
+      }
+      else {    //acssess bit is off - swap thhis page
+        pm->container[0]=-1;
+    
+        for(j=0;j<pm->last-1;j++)
+          pm->container[j]=pm->container[j+1];
 
-      addPage(pm,va);
-  }
-
+        pm->container[pm->last-1]=-1;
+        break;   
+      }
+  }    
+  pm->last--;
+  proc->numOfPsycPages--;
+  //addPage(pm,va);
   ret = va;
+
+  cprintf("(removeFromPhysic) LAST is: %d\n",pm->last);
+  cprintf("(removeFromPhysic) num of physics is: %d\n",proc->numOfPsycPages);
 
   #endif
 
@@ -588,7 +628,6 @@ int addPage(struct pagesInMem *pm, uint va ){      //add page to container accor
   va=PGROUNDDOWN(va);
   
   #ifdef LIFO
-  
   pm->container[pm->top]= va;
   pm->top++;
   proc->numOfPsycPages++;
@@ -599,6 +638,9 @@ int addPage(struct pagesInMem *pm, uint va ){      //add page to container accor
   #ifdef SCFIFO
   pm->container[pm->last] = va;
   pm->last = (pm->last +1) % MAX_PSYC_PAGES;
+  proc->numOfPsycPages++;
+  cprintf("(addpage) last is: %d\n",pm->last);
+  cprintf("(addpage) num of physis is: %d\n",proc->numOfPsycPages);
   #endif
 
 
@@ -753,6 +795,13 @@ void
       copyPm->container[i] = pm->container[i];
     copyPm->top = pm->top;
     #endif 
+
+    #ifdef SCFIFO
+    for(int i = 0; i < MAX_PSYC_PAGES; i++)
+      copyPm->container[i] = pm->container[i];
+    copyPm->last = pm->last;
+    #endif 
+
 }
 void
   clearPm(struct pagesInMem* pm)
@@ -762,15 +811,19 @@ void
       pm->container[i] = -1;
     pm->top = 0;
     #endif
+
+    #ifdef SCFIFO
+    for(int i = 0; i < MAX_PSYC_PAGES; i++)
+      pm->container[i] = -1;
+    pm->last = 0;
+    #endif
 }
 
 void clearSwapData(struct swapedMetaData *sm){
-  #ifdef LIFO
-  for(int i=0; i< MAX_PSYC_PAGES; i++){
+  for(int i=0; i< MAX_PSYC_PAGES; i++)
     sm->pagesOffset[i] = -1;
-    sm->numOfPagesInFile = 0;
-  }
-  #endif
+  sm->numOfPagesInFile = 0;
+  
 }  
 
 int checkShellInit(char nm[]){

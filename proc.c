@@ -63,7 +63,7 @@ found:
     #endif
     
     #ifdef SCFIFO
-      p->Ppages.first=0;
+      //p->Ppages.first=0;
       p->Ppages.last=0;
     #endif
 
@@ -530,7 +530,7 @@ procdump(void)
     else
       state = "???";
   	#ifndef NONE
-    cprintf("%d %s %d %d %d %d %s", p->pid, state, p->numOfPsycPages, p->swapedPages.numOfPagesInFile, p->numOfPageFaults, p->totalNumOfPagedOuts, p->name);
+    cprintf("%d %s %d %d %d %d %s", p->pid, state, p->sz/PGSIZE, p->swapedPages.numOfPagesInFile, p->numOfPageFaults, p->totalNumOfPagedOuts, p->name);
     #else
     cprintf("%d %s %s", p->pid, state, p->name);
     #endif
