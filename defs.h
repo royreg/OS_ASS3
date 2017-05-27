@@ -171,7 +171,8 @@ void            timerinit(void);
 void            idtinit(void);
 extern uint     ticks;
 void            tvinit(void);
-extern struct spinlock tickslock;
+extern struct 	spinlock tickslock;
+
 
 // uart.c
 void            uartinit(void);
@@ -195,6 +196,7 @@ void            switchkvm(void);
 int             copyout(pde_t*, uint, void*, uint);
 void            clearpteu(pde_t *pgdir, char *uva);
 
+
 #ifndef NONE
     uint removeFromPhysic(pde_t *pgdir,struct pagesInMem* );
     int addPage(struct pagesInMem* ,uint );
@@ -204,6 +206,7 @@ void            clearpteu(pde_t *pgdir, char *uva);
     void clearPm(struct pagesInMem* pm);
     void copyPm(struct pagesInMem* pm, struct pagesInMem* copyPm);
     void clearSwapData(struct swapedMetaData *sm);
+    void updateAccessed(void);
 
 
 #endif

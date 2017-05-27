@@ -23,8 +23,11 @@ struct segdesc gdt[NSEGS];
     int checkShellInit(char nm[]);            
     void deleteFromPhysic(uint va);                    //update due policy
     void deleteFromSwapMeta(uint a);
-
-
+    void updateAccessed();
+    
+    //debugging
+    void printContainer(struct pagesInMem* pm);
+    void printAccessCounter(struct pagesInMem* pm);
 
   #endif
  
@@ -276,9 +279,11 @@ allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
         }
 
       }
+
+
       
       uint swapedPage=removeFromPhysic(pgdir,&proc->Ppages);
-
+      cprintf("$$$$$$$$$$$$$$$$$$$$$$$$$$$$\n\n\n");
       cprintf("(allocuvm) page to swap out is: %d\n",swapedPage);
       swapOut(swapedPage);
     }
@@ -492,7 +497,7 @@ void deleteFromPhysic(uint va){
       return;
     }
     int page = 0;
-    for(; page <= pm->top; page++){
+    for(; page < pm->top; page++){
       if(pm->container[page] == va)
         goto rearage;
     }
@@ -509,9 +514,8 @@ void deleteFromPhysic(uint va){
 
   //LIFO  
   #endif  
-
   #ifdef SCFIFO
-     struct pagesInMem *pm=&proc->Ppages;
+    struct pagesInMem *pm=&proc->Ppages;
     va = PGROUNDDOWN(va);
     if(!pm->last){
       return;
@@ -532,7 +536,33 @@ void deleteFromPhysic(uint va){
     cprintf("(deleteFromPhysic) last is; %d\n",pm->last);
     cprintf("(deleteFromPhysic) num of physis is: %d\n",proc->numOfPsycPages);
 
-  //SCFOFO
+  #endif //SCFOFO
+
+  #ifdef LAP
+    struct pagesInMem *pm=&proc->Ppages;
+    va = PGROUNDDOWN(va);
+    if(!pm->lapInd){
+      return;
+    }
+    int page = 0;
+    for(; page < pm->lapInd; page++){
+      if(pm->container[page] == va)
+        goto rearage;
+    }
+    return;
+    rearage:
+    for(;page < pm->lapInd-1; page++){
+      pm->container[page] = pm->container[page+1];
+      pm->accessCounter[page] = pm->accessCounter[page+1];
+    }
+    pm->container[pm->lapInd-1] = -1;
+    pm->accessCounter[pm->lapInd-1]= 0;
+    pm->lapInd--;
+    proc->numOfPsycPages--;
+
+    cprintf("(deleteFromPhysic) lapInd is; %d\n",pm->lapInd);
+    cprintf("(deleteFromPhysic) num of physis is: %d\n",proc->numOfPsycPages);
+
   #endif
 
 }
@@ -556,7 +586,6 @@ void deleteFromSwapMeta(uint a){
 uint removeFromPhysic(pde_t *pgdir,struct pagesInMem *pm){
   uint ret;
 
-
   #ifdef LIFO
   if(!pm->top)
       panic("(LIFO) trying to select a page while the process has none.");
@@ -573,41 +602,46 @@ uint removeFromPhysic(pde_t *pgdir,struct pagesInMem *pm){
   #endif
 
 #ifdef SCFIFO
+
+  if(!pm->last)
+      panic("(SCFIFO) trying to select a page while the process has none.");
+
   pte_t *pte;
   uint va=0;
   int i;
   int j;
-  for(i = 0; i< MAX_PSYC_PAGES +1; i++)              
-  {
-      
-      uint va=pm->container[0];
+  for(i = 0; i< MAX_PSYC_PAGES -1; i++)              
+  { 
+      va=pm->container[0];
+       
+
       if((pte = walkpgdir(pgdir, (void*)va, 0)) ==0)
         panic("SCFIO remove from phys");
 
    
       if(*pte & PTE_A){    //acssess bit is on - give another chance
-        *pte = (*pte & ~PTE_A);
+        *pte = (*pte & ~PTE_A);              //turn A bit off
 
         for(j=0;j<pm->last-1;j++)
           pm->container[j]=pm->container[j+1];
 
-        pm->container[pm->last -1]=va;
+        pm->container[pm->last -1]=va;  
         continue;
 
       }
       else {    //acssess bit is off - swap thhis page
+        
         pm->container[0]=-1;
     
         for(j=0;j<pm->last-1;j++)
           pm->container[j]=pm->container[j+1];
-
         pm->container[pm->last-1]=-1;
-        break;   
+          
       }
+      break; 
   }    
   pm->last--;
   proc->numOfPsycPages--;
-  //addPage(pm,va);
   ret = va;
 
   cprintf("(removeFromPhysic) LAST is: %d\n",pm->last);
@@ -616,9 +650,46 @@ uint removeFromPhysic(pde_t *pgdir,struct pagesInMem *pm){
   #endif
 
   #ifdef LAP
+  if(!pm->lapInd)
+      panic("(LAP) trying to select a page while the process has none.");
 
+  uint va=0;
+  int findMin=pm->accessCounter[0];
+  int i=0;	
+  int ind=0;
+  int j;
+  for(i=1;i<pm->lapInd;i++){
+  	if(pm->accessCounter[i]<findMin){
+  		findMin=pm->accessCounter[i];
+  		ind=i;	
+  	}
+  }
+
+  va=pm->container[ind];
+  printContainer(pm);
+  printAccessCounter(pm);
+  cprintf("va1 %d\n\n\n",va);
+
+  if(ind<pm->lapInd-1){
+  	for(j=ind;j<pm->lapInd-1;j++){
+  		pm->container[j]=pm->container[j+1];
+  		pm->accessCounter[j]=pm->accessCounter[j+1];
+  	}
+  }
+
+  pm->container[pm->lapInd-1]=-1;
+  pm->accessCounter[pm->lapInd-1]=0;
+ 	
+  pm->lapInd--;
+  proc->numOfPsycPages--;
+  printContainer(pm);
+  cprintf("va %d\n\n\n",va);
+  ret = va;  
+
+  cprintf("(removeFromPhysic) lapInd is: %d\n",pm->lapInd);
+  cprintf("(removeFromPhysic) num of physics is: %d\n",proc->numOfPsycPages);
   #endif
-  
+ 
   return ret;
 }
 
@@ -637,7 +708,7 @@ int addPage(struct pagesInMem *pm, uint va ){      //add page to container accor
 
   #ifdef SCFIFO
   pm->container[pm->last] = va;
-  pm->last = (pm->last +1) % MAX_PSYC_PAGES;
+  pm->last++;
   proc->numOfPsycPages++;
   cprintf("(addpage) last is: %d\n",pm->last);
   cprintf("(addpage) num of physis is: %d\n",proc->numOfPsycPages);
@@ -645,6 +716,12 @@ int addPage(struct pagesInMem *pm, uint va ){      //add page to container accor
 
 
   #ifdef LAP
+  pm->container[pm->lapInd] = va;
+  pm->accessCounter[pm->lapInd] = 0;
+  pm->lapInd++;
+  proc->numOfPsycPages++;
+  cprintf("(addpage) lapInd is: %d\n",pm->lapInd);
+  cprintf("(addpage) num of physis is: %d\n",proc->numOfPsycPages);
 
   #endif
 
@@ -802,6 +879,13 @@ void
     copyPm->last = pm->last;
     #endif 
 
+    #ifdef LAP
+    for(int i = 0; i < MAX_PSYC_PAGES; i++){
+      copyPm->container[i] = pm->container[i];
+  	  copyPm->accessCounter[i] = pm->accessCounter[i];}
+    copyPm->lapInd = pm->lapInd;
+    #endif 
+
 }
 void
   clearPm(struct pagesInMem* pm)
@@ -816,6 +900,13 @@ void
     for(int i = 0; i < MAX_PSYC_PAGES; i++)
       pm->container[i] = -1;
     pm->last = 0;
+    #endif
+
+    #ifdef LAP
+    for(int i = 0; i < MAX_PSYC_PAGES; i++){
+      pm->container[i] = -1;
+  	  pm->accessCounter[i] = 0;}
+    pm->lapInd = 0;
     #endif
 }
 
@@ -834,6 +925,44 @@ int checkShellInit(char nm[]){
 
   return 1;
 }
+
+
+
+void printContainer(struct pagesInMem* pm){
+
+for (int i = 0; i <MAX_PSYC_PAGES ; ++i)
+  cprintf("container [%d] : = %d\n",i,pm->container[i]);
+}
+#ifdef LAP
+void printAccessCounter(struct pagesInMem* pm){
+
+for (int i = 0; i <MAX_PSYC_PAGES ; ++i)
+  cprintf("accessCounter [%d] : = %d\n",i,pm->accessCounter[i]);
+}
+
+
+void updateAccessed(){             //last function in this mother fu**ing ASS face assignment
+	pte_t *pte;
+
+	/*if( !(checkShellInit(proc->name)) || !proc )
+		return;*/
+	if(!proc || proc->pid <= 2)
+		return;
+
+	 for(int page=0;page<MAX_PSYC_PAGES; page++){
+      if((proc->Ppages).accessCounter[page] < 4294967295 ){
+        pte = walkpgdir(proc->pgdir, (char*)(page*PGSIZE), 0);
+        if(*pte & PTE_A)
+          (proc->Ppages).accessCounter[page]++;
+        *pte = *pte & ~PTE_A;
+        lcr3(v2p(proc->pgdir)); // refresh TLB
+        }
+    }
+    cprintf("###########################################\n");
+    printAccessCounter(&proc->Ppages);
+    cprintf("###########################################\n");
+}	
+#endif	
 
 
 

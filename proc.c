@@ -68,6 +68,10 @@ found:
     #endif
 
     #ifdef LAP
+      p->Ppages.lapInd=0;
+      for (int i = 0; i < 15; ++i)
+        p->Ppages.accessCounter[i]=0;
+        
     #endif 
 
   #endif
@@ -208,13 +212,14 @@ fork(void)
             panic("error reading from file at fork");
             break;}
 
-          if((writeToSwapFile(proc, &buff ,i*PGSIZE,PGSIZE))==0){
+          if((writeToSwapFile(np, &buff ,i*PGSIZE,PGSIZE))==0){
             panic("error reading from file at fork");
-            break;}      
-      }     
+            break;
+          }
+          np->swapedPages.pagesOffset[i] =proc->swapedPages.pagesOffset[i];       
+      }
     }
     #endif
-
 
   // lock to force the compiler to emit the np->state write last.
   acquire(&ptable.lock);

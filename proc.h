@@ -68,7 +68,7 @@ struct pagesInMem {
   
   #ifdef LAP
   int accessCounter[MAX_PSYC_PAGES];
-  int LAPInd;
+  int lapInd;
   #endif
 };
 
